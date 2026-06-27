@@ -1,4 +1,5 @@
 streamlit
 numpy
+tflite-runtime==2.14.0
 opencv-python-headless
 pillow
