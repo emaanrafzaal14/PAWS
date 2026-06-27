@@ -1,3 +1,5 @@
 streamlit
-pillow
 numpy
+tflite-runtime
+opencv-python-headless
+pillow
