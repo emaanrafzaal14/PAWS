@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import cv2
 from PIL import Image
-import tensorflow as tf  # Stable TensorFlow engine for Streamlit Cloud
+import onnxruntime as ort  # Ultra-lightweight and stable for Streamlit Cloud
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -15,16 +15,16 @@ st.title("PAWS - Proactive Animal Welfare System")
 # ==========================================
 # CONFIGURATION - ADJUST THESE VALUES!
 # ==========================================
-MODEL_PATH = "model.tflite"
+# To match the ONNX engine, ensure your downloaded file from Edge Impulse is .onnx format!
+MODEL_PATH = "model.onnx"
 
 # Mapping your classes exactly as Trained in Edge Impulse
-# Index 0 and 1 must match the alphabetical order in Edge Impulse (e.g., "Injured", "Uninjured")
 LABELS = ["Injured", "Uninjured"] 
 
 # Email configurations (Using Gmail App Passwords)
-SENDER_EMAIL = "your_course_email@gmail.com"  # <-- Change to your Gmail
-SENDER_PASSWORD = "your_16_digit_app_password" # <-- Change to your 16-character App Password
-RECEIVER_EMAIL = "emergency_contact@gmail.com"  # <-- Change to who gets the alerts
+SENDER_EMAIL = "your_course_email@gmail.com"  
+SENDER_PASSWORD = "your_16_digit_app_password" 
+RECEIVER_EMAIL = "emergency_contact@gmail.com"  
 CAMERA_LOCATION = "NUST Campus, Islamabad"
 
 # ==========================================
@@ -52,12 +52,10 @@ def send_injury_alert(image_bytes, label, confidence):
         """
         msg.attach(MIMEText(body, 'plain'))
 
-        # Attach the captured camera snapshot
         img_attachment = MIMEImage(image_bytes)
         img_attachment.add_header('Content-Disposition', 'attachment', filename="injured_animal.jpg")
         msg.attach(img_attachment)
 
-        # Connect to Gmail Security Server
         server = smtplib.SMTP('://gmail.com', 587)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
@@ -72,26 +70,32 @@ def send_injury_alert(image_bytes, label, confidence):
 # CORE FUNCTION: MODEL LOADING & PREDICT
 # ==========================================
 @st.cache_resource
-def load_tflite_model(path):
-    # This loads the brains of your Edge Impulse file into Streamlit Cloud memory
-    interpreter = tf.lite.Interpreter(model_path=path)
-    interpreter.allocate_tensors()
-    return interpreter
+def load_onnx_model(path):
+    # This loads the lightweight ONNX runtime engine
+    session = ort.InferenceSession(path)
+    return session
 
 try:
-    interpreter = load_tflite_model(MODEL_PATH)
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
+    session = load_onnx_model(MODEL_PATH)
+    input_details = session.get_inputs()[0]
+    output_details = session.get_outputs()[0]
     
-    # Safely extract height and width from the standard 4D tensor shape [1, height, width, 3]
-    expected_height = input_details[0]['shape'][1]
-    expected_width = input_details[0]['shape'][2]
+    # Extract expected resolution dimensions from the model profile shape
+    # Typically shape looks like [1, 3, 96, 96] or [1, 96, 96, 3] depending on compilation
+    shape = input_details.shape
+    
+    # Intelligently find height and width whether channels are first or last
+    if shape[1] == 3 or shape[1] == 1:
+        expected_height, expected_width = shape[2], shape[3]
+        channels_first = True
+    else:
+        expected_height, expected_width = shape[1], shape[2]
+        channels_first = False
 
     # Camera feed input UI block
     img_file = st.camera_input("Point camera at the animal")
 
     if img_file is not None:
-        # Save raw bytes for email attachment before processing
         raw_bytes = img_file.getvalue()
         
         image = Image.open(img_file).convert("RGB")
@@ -100,13 +104,18 @@ try:
         # Mirroring Edge Impulse DSP sizing and normalization
         resized_img = cv2.resize(img_array, (expected_width, expected_height))
         normalized_img = resized_img.astype(np.float32) / 255.0
+        
+        if channels_first:
+            # Reorder dimensions from [H, W, C] to [C, H, W] if your ONNX structure requires it
+            normalized_img = np.transpose(normalized_img, (2, 0, 1))
+            
         input_data = np.expand_dims(normalized_img, axis=0)
 
         if st.button("Analyze Scan"):
-            interpreter.set_tensor(input_details[0]['index'], input_data)
-            interpreter.invoke()
+            # Run cloud inference using ONNX Runtime
+            input_name = input_details.name
+            output_data = session.run(None, {input_name: input_data})[0][0]
             
-            output_data = interpreter.get_tensor(output_details[0]['index'])[0]
             max_idx = np.argmax(output_data)
             predicted_label = LABELS[max_idx]
             confidence_score = output_data[max_idx] * 100
