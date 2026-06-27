@@ -45,3 +45,4 @@ if camera_image:
 
     except:
         st.error("Model failed to run. Check Edge Impulse setup.")
+st.write(result)
