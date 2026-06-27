@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import cv2
 from PIL import Image
-import tflite_runtime.interpreter as tflite
+import tensorflow as tf  # Stable TensorFlow engine for Streamlit Cloud
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -22,9 +22,9 @@ MODEL_PATH = "model.tflite"
 LABELS = ["Injured", "Uninjured"] 
 
 # Email configurations (Using Gmail App Passwords)
-SENDER_EMAIL = "your_course_email@gmail.com"
-SENDER_PASSWORD = "your_16_digit_app_password" 
-RECEIVER_EMAIL = "emergency_contact@gmail.com"
+SENDER_EMAIL = "your_course_email@gmail.com"  # <-- Change to your Gmail
+SENDER_PASSWORD = "your_16_digit_app_password" # <-- Change to your 16-character App Password
+RECEIVER_EMAIL = "emergency_contact@gmail.com"  # <-- Change to who gets the alerts
 CAMERA_LOCATION = "NUST Campus, Islamabad"
 
 # ==========================================
@@ -73,7 +73,8 @@ def send_injury_alert(image_bytes, label, confidence):
 # ==========================================
 @st.cache_resource
 def load_tflite_model(path):
-    interpreter = tflite.Interpreter(model_path=path)
+    # This loads the brains of your Edge Impulse file into Streamlit Cloud memory
+    interpreter = tf.lite.Interpreter(model_path=path)
     interpreter.allocate_tensors()
     return interpreter
 
@@ -83,8 +84,8 @@ try:
     output_details = interpreter.get_output_details()
     
     # Safely extract height and width from the standard 4D tensor shape [1, height, width, 3]
-    expected_height = input_details['shape'][1]
-    expected_width = input_details['shape'][2]
+    expected_height = input_details[0]['shape'][1]
+    expected_width = input_details[0]['shape'][2]
 
     # Camera feed input UI block
     img_file = st.camera_input("Point camera at the animal")
@@ -102,10 +103,10 @@ try:
         input_data = np.expand_dims(normalized_img, axis=0)
 
         if st.button("Analyze Scan"):
-            interpreter.set_tensor(input_details['index'], input_data)
+            interpreter.set_tensor(input_details[0]['index'], input_data)
             interpreter.invoke()
             
-            output_data = interpreter.get_tensor(output_details['index'])[0]
+            output_data = interpreter.get_tensor(output_details[0]['index'])[0]
             max_idx = np.argmax(output_data)
             predicted_label = LABELS[max_idx]
             confidence_score = output_data[max_idx] * 100
