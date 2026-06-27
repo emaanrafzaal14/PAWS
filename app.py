@@ -12,7 +12,7 @@ st.markdown(
 st.markdown("### Upload an image to detect whether an animal needs attention.")
 
 # ---------------- IMAGE UPLOAD ----------------
-uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
+camera_image = st.camera_input("Point camera at the animal 📷")
 
 # ---------------- MAIN LOGIC ----------------
 if uploaded_file:
