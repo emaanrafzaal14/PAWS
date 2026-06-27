@@ -1,5 +1,5 @@
 streamlit
 numpy
-tensorflow-cpu
+onnxruntime
 opencv-python-headless
 pillow
