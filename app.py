@@ -1,43 +1,47 @@
 import streamlit as st
 from PIL import Image
+import os
 
-# ---------------- PAGE SETUP ----------------
+# ---------------- SETUP ----------------
 st.set_page_config(page_title="PAWS", page_icon="🐾")
 
-# ---------------- TITLE ----------------
 st.title("PAWS - Proactive Animal Welfare System 🐾")
+st.markdown("AI-powered animal welfare detection system using Edge Impulse")
 
-st.markdown(
-    "<p style='color:#7A2E2E; font-size:18px;'>AI-powered system for detecting animals needing attention</p>",
-    unsafe_allow_html=True
-)
+# ---------------- CAMERA ----------------
+camera_image = st.camera_input("Capture an animal image 📷")
 
-st.markdown("### Point your camera at an animal 📷")
-
-# ---------------- CAMERA INPUT ----------------
-camera_image = st.camera_input("Capture image")
-
-# ---------------- PROCESS IMAGE ----------------
+# ---------------- PROCESS ----------------
 if camera_image:
-    image = Image.open(camera_image)
-    st.image(image, caption="Captured Image", use_container_width=True)
+    image_path = "temp.jpg"
+    
+    # Save image from Streamlit
+    with open(image_path, "wb") as f:
+        f.write(camera_image.getbuffer())
 
-    st.write("🧠 Running AI model...")
+    st.image(image_path, caption="Captured Image")
 
-    # ---------------- PLACEHOLDER MODEL OUTPUT ----------------
-    # (Edge Impulse model will replace this later)
-    prediction = "Stray (Demo Output)"
+    st.write("🧠 Running Edge Impulse model...")
 
-    st.success(f"Prediction: {prediction}")
+    # ---------------- RUN EDGE IMPULSE ----------------
+    # IMPORTANT: your .eim must be set up in the same environment
+    os.system(f"edge-impulse-linux-runner --image {image_path} > result.txt")
 
-    # ---------------- ADVICE SYSTEM ----------------
-    if "Injured" in prediction:
-        st.info("⚠️ The animal may be injured. Contact a local animal rescue immediately.")
-    elif "Stray" in prediction:
-        st.info("🐾 The animal appears stray. Provide safe help or report to authorities.")
-    else:
-        st.info("✅ The animal appears healthy. No immediate action required.")
+    # ---------------- READ OUTPUT ----------------
+    try:
+        with open("result.txt", "r") as f:
+            result = f.read()
 
-# ---------------- FOOTER ----------------
-st.markdown("---")
-st.markdown("Made with ❤️ for animal welfare")
+        st.success("Prediction Result:")
+        st.text(result)
+
+        # ---------------- SIMPLE ADVICE LAYER ----------------
+        if "injured" in result.lower():
+            st.warning("⚠️ Animal may be injured. Contact local animal rescue immediately.")
+        elif "stray" in result.lower():
+            st.info("🐾 Stray detected. Provide safe help or report to authorities.")
+        else:
+            st.success("✅ Animal appears healthy.")
+
+    except:
+        st.error("Model failed to run. Check Edge Impulse setup.")
